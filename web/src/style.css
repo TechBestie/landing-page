@@ -395,3 +395,29 @@ body.mode-detail :is(.intro, .finder, .hint) { opacity: 0; pointer-events: none;
 @media (prefers-reduced-motion: reduce) {
   .q, .result { animation: none; }
 }
+
+/* Phones: the 3D scene fills the whole screen, so the text gets a dark
+   backing at the top and bottom and the scene shows through the middle. */
+@media (max-width: 760px) {
+  .hud::before, .hud::after {
+    content: ''; position: absolute; left: 0; right: 0; z-index: -1; pointer-events: none;
+    opacity: 0; transition: opacity 0.5s ease;
+  }
+  .hud::before {
+    top: 0; height: 40vh;
+    background: linear-gradient(to bottom, rgba(10, 6, 3, 0.97) 0%, rgba(10, 6, 3, 0.92) 58%, rgba(10, 6, 3, 0) 100%);
+  }
+  .hud::after {
+    bottom: 0; height: 44vh;
+    background: linear-gradient(to top, rgba(10, 6, 3, 0.97) 0%, rgba(10, 6, 3, 0.92) 62%, rgba(10, 6, 3, 0) 100%);
+  }
+  body.mode-browse .hud::before, body.mode-browse .hud::after { opacity: 1; }
+  .intro h1 { font-size: 34px; }
+  .intro p { color: rgba(255, 244, 230, 0.78); }
+  .finder li button { color: #fcd9a8; }
+}
+
+/* The scene sits right of centre on wide screens; its hint follows. */
+@media (min-width: 761px) {
+  .hint { left: 60%; }
+}

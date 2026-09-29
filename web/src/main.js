@@ -410,6 +410,7 @@ let shiftZ = 0
 let portrait = false
 let panelShift = -2
 let panelWide = false
+let browseShift = 0
 const pointer = new THREE.Vector2()
 const clock = new THREE.Clock()
 
@@ -625,6 +626,8 @@ function resize() {
   // Keep a full card visible: pull the camera back on narrow screens.
   const half = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))
   camera.userData.z = Math.max(9.6, RADIUS + (CARD_W * 1.12) / (2 * half * camera.aspect))
+  // On wide screens the scene sits right of centre, clear of the headline.
+  browseShift = portrait ? 0 : 0.09 * 2 * camera.userData.z * half * camera.aspect
   camera.updateProjectionMatrix()
   measurePanel()
 }
@@ -643,7 +646,7 @@ function frame() {
   const inCalc = mode === 'calc'
   const side = mode !== 'browse' && mode !== 'loading'
   calcMix += ((inCalc ? 1 : 0) - calcMix) * k * 0.8
-  shiftX += ((side && !portrait ? panelShift : 0) - shiftX) * k * 0.7
+  shiftX += ((side ? (portrait ? 0 : panelShift) : browseShift) - shiftX) * k * 0.7
   shiftY += ((side && portrait ? 1.7 : 0) - shiftY) * k * 0.7
   // A wide panel leaves little room, so the cards also step back to fit.
   shiftZ += ((side && !portrait && panelWide && !inCalc ? -5 : 0) - shiftZ) * k * 0.7
@@ -668,7 +671,8 @@ function frame() {
     // Turn with the helix but never show the mirrored back face.
     card.rotation.y = Math.sin(a) * 0.95
     const isFocus = i === f
-    let o = isFocus ? 1 : 0.5
+    // On phones the side cards sit behind the text, so they stay faint.
+    let o = isFocus ? 1 : portrait ? 0.28 : 0.5
     if (filter && projects[i].category !== filter) o = 0.08
     if (mode === 'detail' && !isFocus) o *= 0.35
     if (mode === 'contact' || mode === 'login') o *= 0.3
