@@ -1,0 +1,17 @@
+{
+  "name": "techbestie",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "build": "vite build web --outDir ../dist --emptyOutDir",
+    "start": "node server.js --prod"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}

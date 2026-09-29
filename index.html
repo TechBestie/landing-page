@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Estimasi biaya pembuatan aplikasi, AI, dan VAPT dari Tech Bestie dalam 1 menit.">
+<title>Tech Bestie Estimator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap">
+<style>
+  :root{
+    --bg:#FFFCF2; --surface:#FFFFFF; --surface-2:#FFF7D6;
+    --ink:#17150F; --ink-2:#5C574A; --line:#E9E2C9; --line-2:#D9CF9E;
+    --accent:#FFD60A; --accent-deep:#C99E00; --accent-ink:#17150F;
+    --ok:#2E7D4F; --shadow:0 12px 40px -18px rgba(90,70,0,.35);
+    --r:16px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#141310; --surface:#1D1B15; --surface-2:#26230F;
+      --ink:#F5F1E2; --ink-2:#A8A28D; --line:#2E2B21; --line-2:#4C4520;
+      --accent:#FFD60A; --accent-deep:#F2CC1A; --accent-ink:#17150F;
+      --ok:#6FCF97; --shadow:0 12px 40px -18px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#141310; --surface:#1D1B15; --surface-2:#26230F;
+    --ink:#F5F1E2; --ink-2:#A8A28D; --line:#2E2B21; --line-2:#4C4520;
+    --accent:#FFD60A; --accent-deep:#F2CC1A; --accent-ink:#17150F;
+    --ok:#6FCF97; --shadow:0 12px 40px -18px rgba(0,0,0,.7);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"DM Sans",system-ui,-apple-system,Segoe UI,sans-serif;font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  h1,h2,h3{font-family:"Bricolage Grotesque","DM Sans",system-ui,sans-serif;text-wrap:balance;margin:0;line-height:1.08;letter-spacing:-.02em}
+  button{font:inherit;color:inherit;cursor:pointer}
+  :focus-visible{outline:3px solid var(--accent);outline-offset:3px;border-radius:8px}
+  .wrap{max-width:1080px;margin:0 auto;padding-inline:20px}
+
+  /* nav */
+  .nav{display:flex;align-items:center;justify-content:space-between;padding-block:20px}
+  .logo{display:flex;align-items:center;gap:10px;font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:20px;letter-spacing:-.02em}
+  .logo i{width:30px;height:30px;border-radius:9px;background:var(--accent);display:grid;place-items:center;color:var(--accent-ink);font-style:normal;font-size:15px;transform:rotate(-6deg)}
+  .nav a{color:var(--ink-2);text-decoration:none;font-weight:500;font-size:15px}
+  .nav a:hover{color:var(--ink)}
+
+  /* hero */
+  .hero{padding-block:28px 24px;display:grid;gap:14px}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+  .eyebrow::before{content:"";width:22px;height:4px;border-radius:2px;background:var(--accent)}
+  .hero h1{font-size:clamp(34px,6vw,60px);font-weight:800;max-width:14ch}
+  .hero h1 mark{background:linear-gradient(transparent 62%,var(--accent) 62%);color:inherit;padding-inline:2px}
+  .hero p{margin:0;max-width:52ch;color:var(--ink-2);font-size:17px}
+
+  /* wizard */
+  .wiz{background:var(--surface);border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow);margin-block:16px 56px;overflow:hidden}
+  .wiz-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 24px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .crumbs{display:flex;gap:6px;flex-wrap:wrap;min-height:26px}
+  .crumb{font-size:13px;font-weight:600;padding:4px 10px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line-2);color:var(--ink);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+  .step-ind{font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums;font-weight:500;white-space:nowrap}
+  .bar{height:5px;background:var(--line)}
+  .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .45s cubic-bezier(.2,.8,.2,1)}
+  .wiz-body{padding:28px 24px 24px}
+  @media(min-width:720px){.wiz-body{padding:36px 40px 32px}.wiz-head{padding:18px 40px}}
+
+  .q{display:grid;gap:22px;animation:in .35s cubic-bezier(.2,.8,.2,1) both}
+  .q.back{animation-name:inBack}
+  @keyframes in{from{opacity:0;transform:translateX(26px)}to{opacity:1;transform:none}}
+  @keyframes inBack{from{opacity:0;transform:translateX(-26px)}to{opacity:1;transform:none}}
+  .q h2{font-size:clamp(24px,3.4vw,32px);font-weight:700}
+  .q .hint{color:var(--ink-2);margin:6px 0 0;font-size:15px}
+  .opts{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+  .opt{position:relative;text-align:left;display:grid;gap:8px;padding:18px 18px 18px 18px;border:1.5px solid var(--line);border-radius:var(--r);background:var(--surface);transition:transform .18s,border-color .18s,box-shadow .18s,background .18s}
+  .opt:hover{transform:translateY(-2px);border-color:var(--line-2);box-shadow:0 8px 24px -14px rgba(90,70,0,.4)}
+  .opt .t{display:flex;align-items:center;justify-content:space-between;gap:10px;font-weight:600;font-size:17px;font-family:"Bricolage Grotesque",sans-serif;letter-spacing:-.01em}
+  .opt .d{color:var(--ink-2);font-size:14px;line-height:1.5}
+  .opt .p{font-size:12.5px;font-weight:600;color:var(--accent-deep);letter-spacing:.02em}
+  .opt .chk{flex:none;width:22px;height:22px;border-radius:7px;border:2px solid var(--line-2);display:grid;place-items:center;transition:.18s}
+  .opt.single .chk{border-radius:50%}
+  .opt .chk svg{width:13px;height:13px;opacity:0;transform:scale(.5);transition:.18s}
+  .opt[aria-pressed="true"]{border-color:var(--accent);background:var(--surface-2);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 35%,transparent)}
+  .opt[aria-pressed="true"] .chk{background:var(--accent);border-color:var(--accent)}
+  .opt[aria-pressed="true"] .chk svg{opacity:1;transform:none}
+  .opt .ico{font-size:24px;line-height:1}
+
+  .actions{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:6px;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:13px 22px;border-radius:999px;border:1.5px solid transparent;font-weight:600;font-size:15px;transition:.18s;text-decoration:none}
+  .btn.primary{background:var(--accent);color:var(--accent-ink);box-shadow:0 8px 20px -10px rgba(201,158,0,.8)}
+  .btn.primary:hover{transform:translateY(-1px);box-shadow:0 12px 24px -10px rgba(201,158,0,.9)}
+  .btn.primary:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+  .btn.ghost{background:transparent;border-color:var(--line-2);color:var(--ink)}
+  .btn.ghost:hover{background:var(--surface-2)}
+  .btn.wa{background:#25D366;color:#fff}
+  .btn.wa:hover{transform:translateY(-1px)}
+  .btn.link{padding:8px 4px;color:var(--ink-2);background:none}
+  .btn.link:hover{color:var(--ink)}
+
+  /* result */
+  .result{display:grid;gap:28px;animation:in .4s cubic-bezier(.2,.8,.2,1) both}
+  @media(min-width:860px){.result{grid-template-columns:1.1fr .9fr;gap:36px}}
+  .price-card{background:var(--ink);color:var(--bg);border-radius:20px;padding:28px;display:grid;gap:14px;position:relative;overflow:hidden}
+  :root[data-theme="dark"] .price-card{background:#0E0D0A;color:var(--ink)}
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .price-card{background:#0E0D0A;color:var(--ink)}}
+  .price-card::after{content:"";position:absolute;right:-60px;top:-60px;width:220px;height:220px;border-radius:50%;background:var(--accent);opacity:.18;filter:blur(30px)}
+  .price-card .lab{font-size:13px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;opacity:.75}
+  .price{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:clamp(28px,4.6vw,44px);letter-spacing:-.03em;line-height:1.05;font-variant-numeric:tabular-nums}
+  .price small{display:block;font-family:"DM Sans",sans-serif;font-size:14px;font-weight:500;opacity:.7;letter-spacing:0;margin-top:6px}
+  .price-card .note{font-size:14px;opacity:.8;margin:0}
+  .sum{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+  .sum li{display:flex;justify-content:space-between;gap:12px;font-size:14px;padding:9px 0;border-top:1px solid color-mix(in srgb,currentColor 18%,transparent)}
+  .sum li span:first-child{opacity:.7}
+  .sum li span:last-child{text-align:right;font-weight:600}
+  .est-cta{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+
+  .lead h3{font-size:22px;font-weight:700;margin-bottom:6px}
+  .lead p{color:var(--ink-2);margin:0 0 18px;font-size:15px}
+  .field{display:grid;gap:6px;margin-bottom:14px}
+  .field label{font-size:13px;font-weight:600;letter-spacing:.02em}
+  .field input,.field textarea{font:inherit;color:var(--ink);background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;width:100%;transition:.18s}
+  .field input:focus,.field textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 35%,transparent)}
+  .field textarea{resize:vertical;min-height:84px}
+  .thanks{display:grid;gap:10px;padding:22px;border-radius:16px;background:var(--surface-2);border:1px solid var(--line-2)}
+  .thanks b{font-family:"Bricolage Grotesque",sans-serif;font-size:20px;color:var(--ok)}
+
+  /* why */
+  .why{display:grid;gap:18px;padding-block:10px 60px}
+  .why h2{font-size:clamp(24px,3.4vw,32px)}
+  .why-grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+  .why-grid div{padding:18px;border-top:3px solid var(--accent);background:var(--surface);border-radius:0 0 14px 14px;border-inline:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .why-grid b{display:block;font-family:"Bricolage Grotesque",sans-serif;font-size:17px;margin-bottom:6px}
+  .why-grid p{margin:0;color:var(--ink-2);font-size:14.5px}
+  footer{border-top:1px solid var(--line);padding-block:24px;color:var(--ink-2);font-size:14px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav class="nav">
+    <div class="logo"><i>TB</i> Tech Bestie</div>
+    <a id="wa-nav" href="#" target="_blank" rel="noopener">Chat WhatsApp →</a>
+  </nav>
+
+  <section class="hero">
+    <span class="eyebrow">Estimasi harga instan</span>
+    <h1>Tau <mark>kisaran biaya</mark> project lu dalam 1 menit.</h1>
+    <p>Jawab beberapa pertanyaan singkat, kami hitung estimasinya langsung. Tanpa daftar, tanpa nunggu sales balesin.</p>
+  </section>
+
+  <section class="wiz" id="wiz" aria-live="polite">
+    <div class="wiz-head">
+      <div class="crumbs" id="crumbs"></div>
+      <div class="step-ind" id="stepind">Langkah 1</div>
+    </div>
+    <div class="bar"><i id="bar"></i></div>
+    <div class="wiz-body" id="body"></div>
+  </section>
+
+  <section class="why">
+    <h2>Kenapa estimasinya bisa dipercaya?</h2>
+    <div class="why-grid">
+      <div><b>Berdasarkan scope, bukan tebakan</b><p>Angka dihitung dari komposisi yang lu pilih: platform, metode, fitur, dan skala.</p></div>
+      <div><b>Range, bukan angka mati</b><p>Kami kasih rentang ±15% karena detail teknis biasanya baru ketahuan saat diskusi.</p></div>
+      <div><b>Gratis & tanpa komitmen</b><p>Estimasi ini cuma titik awal. Kalau cocok, kami lanjut ke proposal detail.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    <span>© 2026 Tech Bestie</span>
+    <span>Web · Mobile · AI · Cyber Security</span>
+  </footer>
+</div>
+
+<script>
+/* =====================================================================
+   CONFIG — edit di sini aja. UI otomatis ngikutin.
+   - price  : ditambahkan ke total (Rupiah)
+   - mult   : mengalikan total (mis. 1.3 = +30%)
+   - multi  : true = checklist (boleh lebih dari satu), false = pilih satu
+   - RANGE  : lebar range estimasi (0.15 = ±15%)
+   ===================================================================== */
+const WA_NUMBER = "6281234567890";     // <-- ganti nomor WA (format internasional, tanpa +)
+const RANGE = 0.15;
+
+const CONFIG = {
+  root: {
+    title: "Lu butuh bantuan apa?",
+    hint: "Pilih satu layanan. Nanti kami tanya detailnya.",
+    multi: false,
+    options: [
+      { id:"web",  ico:"🧩", title:"Web / Mobile Apps Development", desc:"Landing page, company profile, marketplace, SaaS, sampai aplikasi mobile iOS & Android.", next:"web_platform" },
+      { id:"ai",   ico:"🤖", title:"AI Development", desc:"Chatbot, knowledge base (RAG), agent otomasi, computer vision, atau model custom.", next:"ai_type" },
+      { id:"vapt", ico:"🛡️", title:"VAPT / Cyber Security", desc:"Vulnerability Assessment & Penetration Testing untuk web, API, mobile, dan network.", next:"vapt_target" },
+    ]
+  },
+
+  /* ---------- VAPT ---------- */
+  vapt_target: {
+    title:"Apa aja yang mau diuji?", hint:"Boleh pilih lebih dari satu.", multi:true, next:"vapt_method",
+    options:[
+      { id:"web",     title:"Web Application", desc:"Website atau web app: XSS, injection, auth bypass, business logic, dsb.", price:15_000_000 },
+      { id:"api",     title:"API",             desc:"REST/GraphQL: broken auth, IDOR, rate limiting, data exposure.", price:12_000_000 },
+      { id:"mobile",  title:"Mobile App",      desc:"Android/iOS: reverse engineering, insecure storage, komunikasi tidak aman.", price:18_000_000 },
+      { id:"network", title:"Network / Infra", desc:"Server, firewall, service terbuka, misconfiguration.", price:14_000_000 },
+    ]
+  },
+  vapt_method: {
+    title:"Metode pengujiannya?", hint:"Semakin dalam akses yang kami dapat, semakin menyeluruh hasilnya.", multi:false, next:"vapt_size",
+    options:[
+      { id:"black", title:"Black Box", desc:"Tanpa info internal. Simulasi penyerang dari luar.", mult:1.0 },
+      { id:"gray",  title:"Gray Box",  desc:"Dengan akun user & dokumentasi terbatas. Paling umum dipilih.", mult:1.25 },
+      { id:"white", title:"White Box", desc:"Akses penuh ke source code & arsitektur. Paling menyeluruh.", mult:1.6 },
+    ]
+  },
+  vapt_size: {
+    title:"Seberapa besar sistemnya?", hint:"Perkiraan aja, nanti kami verifikasi.", multi:false, next:"vapt_retest",
+    options:[
+      { id:"s", title:"Kecil",  desc:"< 20 halaman/endpoint, 1–2 role user.", mult:1.0 },
+      { id:"m", title:"Sedang", desc:"20–80 halaman/endpoint, beberapa role.", mult:1.5 },
+      { id:"l", title:"Besar",  desc:"> 80 halaman/endpoint, multi-tenant, atau integrasi kompleks.", mult:2.2 },
+    ]
+  },
+  vapt_retest: {
+    title:"Perlu re-test setelah perbaikan?", hint:"Kami uji ulang temuan setelah tim lu memperbaikinya.", multi:false, next:"RESULT",
+    options:[
+      { id:"yes", title:"Ya, termasuk re-test", desc:"1× re-test dalam 30 hari + laporan final.", mult:1.2 },
+      { id:"no",  title:"Tidak perlu",          desc:"Laporan temuan + rekomendasi saja.", mult:1.0 },
+    ]
+  },
+
+  /* ---------- WEB / MOBILE ---------- */
+  web_platform: {
+    title:"Platform apa yang dibutuhkan?", hint:"Boleh pilih lebih dari satu.", multi:true, next:"web_type",
+    options:[
+      { id:"web",     title:"Website / Web App", desc:"Diakses lewat browser, responsive di semua device.", price:10_000_000 },
+      { id:"android", title:"Android",           desc:"Aplikasi native/cross-platform, publish ke Play Store.", price:15_000_000 },
+      { id:"ios",     title:"iOS",               desc:"Aplikasi native/cross-platform, publish ke App Store.", price:15_000_000 },
+    ]
+  },
+  web_type: {
+    title:"Jenis aplikasinya?", multi:false, next:"web_features",
+    options:[
+      { id:"landing", title:"Landing Page",     desc:"1–3 halaman, fokus konversi. Cocok buat campaign atau produk tunggal.", mult:0.6 },
+      { id:"profile", title:"Company Profile",  desc:"5–10 halaman, CMS supaya bisa update konten sendiri.", mult:1.0 },
+      { id:"commerce",title:"E-commerce / Marketplace", desc:"Katalog, keranjang, checkout, pembayaran, manajemen order.", mult:2.2 },
+      { id:"saas",    title:"SaaS / Platform",  desc:"Multi-user, subscription, dashboard, role & permission.", mult:3.0 },
+      { id:"custom",  title:"Custom / Internal Tool", desc:"Sistem sesuai proses bisnis lu: ERP ringan, booking, inventory, dsb.", mult:2.5 },
+    ]
+  },
+  web_features: {
+    title:"Fitur tambahan?", hint:"Centang yang dibutuhkan. Boleh kosong.", multi:true, optional:true, next:"web_timeline",
+    options:[
+      { id:"auth",    title:"Login & User Management", desc:"Registrasi, login sosial, reset password, role.", price:4_000_000 },
+      { id:"payment", title:"Payment Gateway",  desc:"Midtrans/Xendit: transfer, e-wallet, kartu, QRIS.", price:5_000_000 },
+      { id:"admin",   title:"Admin Dashboard",  desc:"Panel untuk kelola data, user, dan laporan.", price:6_000_000 },
+      { id:"notif",   title:"Notifikasi",       desc:"Email, push notification, atau WhatsApp otomatis.", price:3_000_000 },
+      { id:"integ",   title:"Integrasi Pihak Ketiga", desc:"API eksternal, ERP, CRM, atau sistem yang sudah ada.", price:6_000_000 },
+      { id:"i18n",    title:"Multi-bahasa",     desc:"Dukungan lebih dari satu bahasa.", price:2_500_000 },
+    ]
+  },
+  web_timeline: {
+    title:"Seberapa cepat harus jadi?", multi:false, next:"RESULT",
+    options:[
+      { id:"normal", title:"Normal",   desc:"Ikut estimasi timeline kami. Harga standar.", mult:1.0 },
+      { id:"fast",   title:"Prioritas",desc:"Perlu lebih cepat dari normal. Tim diperbesar.", mult:1.35 },
+    ]
+  },
+
+  /* ---------- AI ---------- */
+  ai_type: {
+    title:"Solusi AI seperti apa?", multi:false, next:"ai_data",
+    options:[
+      { id:"chatbot", title:"Chatbot / Customer Service", desc:"Jawab pertanyaan pelanggan 24/7 di web, WhatsApp, atau Telegram.", price:20_000_000 },
+      { id:"rag",     title:"Knowledge Base (RAG)", desc:"AI yang menjawab berdasarkan dokumen internal perusahaan lu.", price:35_000_000 },
+      { id:"agent",   title:"Agent / Otomasi Workflow", desc:"AI yang mengeksekusi tugas: input data, kirim email, proses dokumen.", price:45_000_000 },
+      { id:"cv",      title:"Computer Vision", desc:"Deteksi objek, OCR, klasifikasi gambar/video.", price:50_000_000 },
+      { id:"custom",  title:"Model Custom / Fine-tuning", desc:"Melatih model khusus untuk kasus lu.", price:75_000_000 },
+    ]
+  },
+  ai_data: {
+    title:"Kondisi datanya gimana?", multi:false, next:"ai_deploy",
+    options:[
+      { id:"ready",   title:"Data sudah siap", desc:"Dokumen/dataset sudah terkumpul dan rapi.", mult:1.0 },
+      { id:"messy",   title:"Ada, tapi berantakan", desc:"Perlu dibersihkan, dilabeli, atau distrukturkan.", mult:1.3 },
+      { id:"none",    title:"Belum ada", desc:"Perlu dikumpulkan dari nol. Kami bantu rancang.", mult:1.6 },
+    ]
+  },
+  ai_deploy: {
+    title:"Mau di-deploy di mana?", multi:false, next:"RESULT",
+    options:[
+      { id:"cloud",  title:"Cloud (kami kelola)", desc:"Paling cepat jalan. Biaya server terpisah.", mult:1.0 },
+      { id:"onprem", title:"On-premise", desc:"Di server lu sendiri. Untuk data sensitif.", mult:1.4 },
+      { id:"api",    title:"API only", desc:"Kami sediakan endpoint, tim lu yang integrasikan.", mult:0.85 },
+    ]
+  },
+};
+/* ===================== END CONFIG ===================== */
+
+const $ = s => document.querySelector(s);
+const rupiah = n => "Rp " + (Math.round(n/100000)*100000).toLocaleString("id-ID");
+const CHECK = '<svg viewBox="0 0 16 16" fill="none" stroke="#17150F" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7"/></svg>';
+
+let history = [];  // [{step, picks:[ids]}]
+let current = "root";
+let picks = new Set();
+let dir = "fwd";
+
+function totalSteps(){ // estimate depth from current branch for the indicator
+  let n = 1, s = "root";
+  const chosen = history[0]?.picks[0];
+  if(!chosen) return 4;
+  s = CONFIG.root.options.find(o=>o.id===chosen).next;
+  while(s && s!=="RESULT"){ n++; s = CONFIG[s].next; }
+  return n;
+}
+
+function render(){
+  const step = CONFIG[current];
+  const body = $("#body");
+  const n = history.length + 1, tot = totalSteps();
+  $("#bar").style.width = (current==="RESULT" ? 100 : (history.length/tot)*100) + "%";
+  $("#stepind").textContent = current==="RESULT" ? "Selesai ✓" : `Langkah ${n} dari ${tot}`;
+  $("#crumbs").innerHTML = history.map(h => {
+    const st = CONFIG[h.step];
+    return `<span class="crumb">${h.picks.map(id=>st.options.find(o=>o.id===id).title).join(", ")}</span>`;
+  }).join("");
+
+  if(current==="RESULT"){ renderResult(); return; }
+
+  body.innerHTML = `
+    <div class="q ${dir==="back"?"back":""}">
+      <div><h2>${step.title}</h2>${step.hint?`<p class="hint">${step.hint}</p>`:""}</div>
+      <div class="opts" role="group">
+        ${step.options.map(o=>`
+          <button class="opt ${step.multi?"":"single"}" data-id="${o.id}" aria-pressed="${picks.has(o.id)}">
+            ${o.ico?`<span class="ico">${o.ico}</span>`:""}
+            <span class="t"><span>${o.title}</span><span class="chk">${CHECK}</span></span>
+            <span class="d">${o.desc}</span>
+            ${o.price?`<span class="p">+ ${rupiah(o.price)}</span>`:o.mult&&o.mult!==1?`<span class="p">${o.mult>1?"+":"−"}${Math.round(Math.abs(o.mult-1)*100)}%</span>`:""}
+          </button>`).join("")}
+      </div>
+      <div class="actions">
+        ${history.length?`<button class="btn ghost" id="back">← Kembali</button>`:"<span></span>"}
+        <button class="btn primary" id="next" ${picks.size||step.optional?"":"disabled"}>${step.next==="RESULT"?"Lihat estimasi":"Lanjut"} →</button>
+      </div>
+    </div>`;
+
+  body.querySelectorAll(".opt").forEach(b=>b.addEventListener("click",()=>{
+    const id=b.dataset.id;
+    if(step.multi){ picks.has(id)?picks.delete(id):picks.add(id); }
+    else { picks = new Set([id]); }
+    body.querySelectorAll(".opt").forEach(x=>x.setAttribute("aria-pressed",picks.has(x.dataset.id)));
+    $("#next").disabled = !(picks.size||step.optional);
+    if(!step.multi) setTimeout(next, 220);
+  }));
+  $("#next").addEventListener("click", next);
+  $("#back")?.addEventListener("click", back);
+}
+
+function next(){
+  const step = CONFIG[current];
+  if(!picks.size && !step.optional) return;
+  const arr=[...picks];
+  history.push({step:current, picks:arr});
+  dir="fwd"; picks=new Set();
+  current = current==="root" ? step.options.find(o=>o.id===arr[0]).next : step.next;
+  render();
+  $("#wiz").scrollIntoView({behavior:"smooth",block:"start"});
+}
+function back(){
+  const h = history.pop();
+  dir="back"; current=h.step; picks=new Set(h.picks);
+  render();
+}
+function restart(){ history=[]; picks=new Set(); current="root"; dir="back"; render(); }
+
+function compute(){
+  let add=0, mult=1;
+  history.forEach(h=>h.picks.forEach(id=>{
+    const o=CONFIG[h.step].options.find(o=>o.id===id);
+    if(o.price) add+=o.price; if(o.mult) mult*=o.mult;
+  }));
+  const mid=add*mult;
+  return {low:mid*(1-RANGE), high:mid*(1+RANGE), mid};
+}
+
+function summaryText(){
+  return history.map(h=>{
+    const st=CONFIG[h.step];
+    return `${st.title.replace(/\?$/,"")}: ${h.picks.map(id=>st.options.find(o=>o.id===id).title).join(", ")}`;
+  }).join("\n");
+}
+
+function renderResult(){
+  const {low,high}=compute();
+  const svc = CONFIG.root.options.find(o=>o.id===history[0].picks[0]).title;
+  const waText = encodeURIComponent(`Halo Tech Bestie, saya baru cek estimasi di website.\n\nLayanan: ${svc}\n${summaryText()}\n\nEstimasi: ${rupiah(low)} – ${rupiah(high)}\n\nBisa diskusi lebih lanjut?`);
+  $("#body").innerHTML = `
+    <div class="result">
+      <div class="price-card">
+        <span class="lab">Estimasi biaya</span>
+        <div class="price">${rupiah(low)} – ${rupiah(high)}<small>${svc} · belum termasuk PPN</small></div>
+        <ul class="sum">
+          ${history.slice(1).map(h=>{const st=CONFIG[h.step];return `<li><span>${st.title.replace(/\?$/,"")}</span><span>${h.picks.length?h.picks.map(id=>st.options.find(o=>o.id===id).title).join(", "):"—"}</span></li>`}).join("")}
+        </ul>
+        <p class="note">Angka ini estimasi awal berdasarkan komposisi yang lu pilih. Harga final ditentukan setelah kami pahami detail kebutuhannya.</p>
+        <div class="est-cta">
+          <a class="btn wa" href="https://wa.me/${WA_NUMBER}?text=${waText}" target="_blank" rel="noopener">💬 Butuh cepat? Chat WA</a>
+          <button class="btn link" id="restart">↻ Hitung ulang</button>
+        </div>
+      </div>
+      <form class="lead" id="lead" novalidate>
+        <h3>Mau dihubungi tim kami?</h3>
+        <p>Tinggalkan kontak, kami balas dalam 1×24 jam kerja dengan proposal yang lebih detail.</p>
+        <div class="field"><label for="f-name">Nama</label><input id="f-name" name="name" required placeholder="Nama lu"></div>
+        <div class="field"><label for="f-contact">Email atau nomor WhatsApp</label><input id="f-contact" name="contact" required placeholder="nama@email.com / 0812…"></div>
+        <div class="field"><label for="f-note">Cerita singkat project (opsional)</label><textarea id="f-note" name="note" placeholder="Misal: kami butuh marketplace untuk UMKM, target launch Desember…"></textarea></div>
+        <button class="btn primary" type="submit">Kirim & minta proposal →</button>
+      </form>
+    </div>`;
+  $("#restart").addEventListener("click", restart);
+  $("#lead").addEventListener("submit", e=>{
+    e.preventDefault();
+    const f=e.target, name=f.name.value.trim(), contact=f.contact.value.trim();
+    if(!name||!contact){ (name?f.contact:f.name).focus(); return; }
+    /* TODO: kirim ke backend / Formspree / Google Sheet di sini.
+       Payload yang tersedia: {name, contact, note, summary: summaryText(), estimate: compute()} */
+    console.log("LEAD", {name, contact, note:f.note.value, summary:summaryText(), estimate:compute()});
+    f.outerHTML = `<div class="thanks"><b>Terima kasih, ${name}!</b><span>Kami sudah terima detailnya. Tim Tech Bestie bakal hubungi lu lewat <strong>${contact}</strong> dalam 1×24 jam kerja.</span></div>`;
+  });
+}
+
+$("#wa-nav").href = `https://wa.me/${WA_NUMBER}`;
+render();
+</script>
+</body>
+</html>

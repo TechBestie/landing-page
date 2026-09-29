@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0a0603" />
+    <meta name="description" content="Tech Bestie: web & mobile apps, AI, and cyber security. Estimasi biaya project dalam 1 menit." />
+    <title>Tech Bestie — We build fast. We ship faster.</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%230a0603'/%3E%3Cpath d='M6 8h12M12 8v10' stroke='%23fbbf24' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <canvas id="scene" aria-hidden="true"></canvas>
+    <div class="grain" aria-hidden="true"></div>
+
+    <div id="loader" class="loader">
+      <div class="loader-grid" id="loader-grid" aria-hidden="true"></div>
+      <div class="loader-count"><span id="loader-num">/000</span></div>
+      <div class="loader-tag" data-i18n="loader.tag"></div>
+    </div>
+
+    <div id="hud" class="hud hidden">
+      <header class="top">
+        <a class="brand" href="/" id="brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>Tech Bestie</span>
+        </a>
+        <div class="top-right">
+          <div class="seg" id="lang" role="group" aria-label="Language"></div>
+          <nav class="nav">
+            <button data-go="browse" class="active" data-i18n="nav.work"></button>
+            <button data-go="calc" data-i18n="nav.pricing"></button>
+            <button data-go="contact" data-i18n="nav.contact"></button>
+          </nav>
+        </div>
+      </header>
+
+      <section class="intro" id="intro">
+        <h1><span data-i18n="hero.line1"></span><br /><em data-i18n="hero.line2"></em></h1>
+        <p data-i18n="hero.sub"></p>
+      </section>
+
+      <aside class="finder" id="finder">
+        <div class="finder-title" data-i18n="finder.title"></div>
+        <ul id="filters"></ul>
+        <button class="cta" data-go="calc"><span data-i18n="finder.cta"></span> <span aria-hidden="true">-&gt;</span></button>
+      </aside>
+
+      <div class="counter" id="counter" aria-hidden="true">01 / 08</div>
+      <div class="hint" id="hint" data-i18n="hint.scroll"></div>
+    </div>
+
+    <div id="detail" class="panel detail hidden" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+      <button class="close" data-close data-i18n="close"></button>
+      <div class="panel-kicker" id="detail-client"></div>
+      <h2 id="detail-title"></h2>
+      <p id="detail-summary"></p>
+      <ul class="tags" id="detail-tags"></ul>
+      <button class="cta" data-go="calc"><span data-i18n="detail.cta"></span> <span aria-hidden="true">-&gt;</span></button>
+    </div>
+
+    <div id="calc" class="panel calc wide hidden" role="dialog" aria-modal="true" aria-labelledby="est-title">
+      <div class="panel-top">
+        <div class="panel-kicker" data-i18n="est.kicker"></div>
+        <div class="seg" id="currency" role="group" aria-label="Currency"></div>
+        <button class="close" data-close data-i18n="close"></button>
+      </div>
+      <div class="est-intro" id="est-intro">
+        <h2 id="est-title"><span data-i18n="est.h1a"></span><mark data-i18n="est.h1mark"></mark><span data-i18n="est.h1b"></span></h2>
+        <p data-i18n="est.sub"></p>
+      </div>
+      <section class="wiz" aria-live="polite">
+        <div class="wiz-head">
+          <div class="crumbs" id="wiz-crumbs"></div>
+          <div class="step-ind" id="wiz-step"></div>
+        </div>
+        <div class="bar"><i id="wiz-bar"></i></div>
+        <div class="wiz-body" id="wiz-body"></div>
+      </section>
+      <section class="why" id="why"></section>
+    </div>
+
+    <div id="contact" class="panel contact hidden" role="dialog" aria-modal="true" aria-labelledby="contact-title">
+      <button class="close" data-close data-i18n="close"></button>
+      <div class="panel-kicker" data-i18n="contact.kicker"></div>
+      <h2 id="contact-title" data-i18n="contact.title"></h2>
+      <p data-i18n="contact.body"></p>
+      <a class="cta solid" id="contact-wa" target="_blank" rel="noopener"><span data-i18n="contact.cta"></span> <span aria-hidden="true">-&gt;</span></a>
+    </div>
+
+    <div id="login" class="panel login hidden" role="dialog" aria-modal="true" aria-labelledby="login-title">
+      <button class="close" data-close data-i18n="close"></button>
+      <div class="panel-kicker" data-i18n="login.kicker"></div>
+      <h2 id="login-title" data-i18n="login.title"></h2>
+      <form id="login-form" class="form">
+        <label><span data-i18n="login.user"></span> <input id="login-user" type="text" autocomplete="username" required /></label>
+        <label><span data-i18n="login.pass"></span> <input id="login-pass" type="password" autocomplete="current-password" required /></label>
+        <p class="error" id="login-error" role="alert"></p>
+        <button class="cta solid" type="submit"><span data-i18n="login.submit"></span> <span aria-hidden="true">-&gt;</span></button>
+      </form>
+    </div>
+
+    <div id="admin" class="panel admin wide hidden" role="dialog" aria-modal="true" aria-labelledby="admin-title">
+      <div class="panel-top">
+        <div class="panel-kicker" id="admin-title" data-i18n="admin.title"></div>
+        <button class="close" data-close data-i18n="close"></button>
+      </div>
+      <div class="tabs" id="admin-tabs" role="tablist"></div>
+      <div class="admin-body" id="admin-body"></div>
+      <div class="admin-foot">
+        <span class="status" id="admin-status" role="status"></span>
+        <button class="mini" id="admin-logout" type="button" data-i18n="admin.logout"></button>
+        <button class="cta solid" id="admin-save" type="button" data-i18n="admin.save"></button>
+      </div>
+    </div>
+
+    <div class="sr-only">
+      <h2 data-i18n="services.title"></h2>
+      <ul>
+        <li>Web &amp; Mobile Apps Development</li>
+        <li>AI Development</li>
+        <li>VAPT / Cyber Security</li>
+      </ul>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
