@@ -80,8 +80,8 @@ Production memakai Postgres bersama (shared) dan nginx bersama, keduanya dalam c
 1. **Database dan user baru** di Postgres bersama (sesuaikan nama container):
    ```bash
    PW=$(openssl rand -hex 24); echo "$PW"
-   docker exec -i shared-db psql -U postgres <<SQL
-   CREATE ROLE techbestie LOGIN PASSWORD '$PW';
+   docker exec -i shared-db psql -U admin -d postgres <<SQL
+   CREATE ROLE techbestie LOGIN CONNECTION LIMIT 5 PASSWORD '$PW';
    CREATE DATABASE techbestie OWNER techbestie;
    REVOKE ALL ON DATABASE techbestie FROM PUBLIC;
    SQL
@@ -94,7 +94,7 @@ Production memakai Postgres bersama (shared) dan nginx bersama, keduanya dalam c
    cat > .env <<EOF
    ADMIN_USERNAME=admin
    ADMIN_PASSWORD_HASH=<hasil npm run hash-password>
-   DATABASE_URL=postgres://techbestie:<PW>@<nama-container-db>:5432/techbestie
+   DATABASE_URL=postgres://techbestie:<PW>@shared-db:5432/techbestie
    # Kalau nama Docker network di server berbeda:
    # NGINX_NETWORK=compose_nginx-network
    # DB_NETWORK=shared-db-net
@@ -109,11 +109,13 @@ Production memakai Postgres bersama (shared) dan nginx bersama, keduanya dalam c
    ```
    Isi environment `production` di GitHub: `SSH_HOST`, `SSH_USER`, `SSH_KEY` (isi file private key), dan `SSH_KNOWN_HOSTS` (`ssh-keyscan <IP>`). Lalu push ke `prod`.
 
-4. **Nginx**: salin `deploy/prod/nginx-techbestie.id.conf` ke folder config nginx bersama dan sesuaikan path sertifikat. App bisa dijangkau dari container nginx di `http://techbestie-app:3000`.
+4. **SSL dari Cloudflare (bukan certbot)**: domain di-proxy Cloudflare dengan mode SSL/TLS **Full (strict)**. Di dashboard Cloudflare buka SSL/TLS → Origin Server → Create Certificate untuk `techbestie.id, *.techbestie.id` (RSA, 15 tahun). Simpan certificate sebagai `fullchain.pem` dan private key sebagai `privkey.pem` (chmod 600) di `/root/master/certbot/live/techbestie.id/`. Sertifikat ini tidak perlu diperpanjang.
 
-5. **DNS** (di Hostinger): ubah A record `@` dan `www` ke IP server prod. Email memakai `mx1/mx2.hostinger.com`, jadi tidak ikut terpengaruh. Setelah DNS aktif, terbitkan sertifikat Let's Encrypt lewat webroot, lalu reload nginx.
+5. **Nginx**: salin `deploy/prod/nginx-techbestie.id.conf` ke `/root/master/nginx/conf.d/techbestie.id.conf`, lalu `docker exec nginx nginx -t && docker exec nginx nginx -s reload`. App bisa dijangkau dari container nginx di `http://techbestie-app:3000`. IP asli pengunjung diambil dari `CF-Connecting-IP`, dan hanya dipercaya kalau koneksinya datang dari IP Cloudflare.
 
-6. **Backup harian**:
+   DNS `@` dan `www` (proxied, awan oranye) mengarah ke `62.146.235.187`. Email memakai `mx1/mx2.hostinger.com`, jadi tidak terpengaruh.
+
+6. **Backup harian** (shared-db memakai PostgreSQL 16, jadi set `BACKUP_PG_IMAGE=postgres:16-alpine` di `.env`):
    ```bash
    echo '30 2 * * * root /opt/techbestie/backup.sh >> /var/log/techbestie-backup.log 2>&1' > /etc/cron.d/techbestie-backup
    ```
@@ -126,10 +128,10 @@ Sudah terpasang di 169.58.12.253:
 - App hanya listen di `127.0.0.1:5183`, lalu nginx host meneruskan `dev.techbestie.id` ke port itu.
 - Backup harian jam 02:30 lewat `/etc/cron.d/techbestie-dev-backup`, disimpan 14 hari.
 
-Setelah DNS `dev.techbestie.id` mengarah ke 169.58.12.253, aktifkan HTTPS:
+Setelah record `dev` (proxied) di Cloudflare mengarah ke 169.58.12.253, aktifkan HTTPS memakai Cloudflare Origin Certificate yang sama dengan prod (berlaku untuk `*.techbestie.id`):
 
 ```bash
-certbot certonly --webroot -w /var/www/certbot -d dev.techbestie.id
+install -d -m 700 /etc/ssl/techbestie.id   # isi fullchain.pem + privkey.pem dari Cloudflare
 cp deploy/dev/nginx-dev.techbestie.id.conf /etc/nginx/sites-available/dev.techbestie.id
 nginx -t && systemctl reload nginx
 gh variable set APP_URL --env development -R TechBestie/landing-page -b https://dev.techbestie.id
