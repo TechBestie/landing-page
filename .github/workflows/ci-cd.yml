@@ -1,0 +1,141 @@
+name: CI/CD
+
+# Pull requests into main/dev/prod -> test only.
+# Push to dev  -> test -> Docker image -> deploy to the development server  (environment: development)
+# Push to prod -> test -> Docker image -> deploy to the production server   (environment: production)
+#
+# Per environment (Settings -> Environments):
+#   vars:    SSH_HOST, SSH_USER, APP_URL (optional, for the smoke test), SMOKE_RESOLVE (optional)
+#   secrets: SSH_KEY (private deploy key), SSH_KNOWN_HOSTS (ssh-keyscan of SSH_HOST)
+on:
+  push:
+    branches: [dev, prod]
+  pull_request:
+    branches: [main, dev, prod]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Never cancel a deploy halfway; superseded PR checks can go.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build & test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: techbestie_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U test -d techbestie_test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      - run: npm run build
+
+      - run: npm test
+        env:
+          DATABASE_URL: postgres://test:test@127.0.0.1:5432/techbestie_test
+
+      - name: Check shell scripts
+        run: shellcheck deploy/*.sh
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  deploy:
+    name: Deploy -> ${{ github.ref_name == 'prod' && 'production' || 'development' }}
+    if: github.event_name == 'push' && (github.ref_name == 'dev' || github.ref_name == 'prod')
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: ${{ github.ref_name == 'prod' && 'production' || 'development' }}
+      url: ${{ vars.APP_URL }}
+    env:
+      IMAGE: ${{ github.ref_name == 'prod' && 'techbestie' || 'techbestie-dev' }}
+      CONTAINER: ${{ github.ref_name == 'prod' && 'techbestie-app' || 'techbestie-dev-app' }}
+      DIR: ${{ github.ref_name == 'prod' && '/opt/techbestie' || '/opt/techbestie-dev' }}
+      COMPOSE: ${{ github.ref_name == 'prod' && 'deploy/prod/docker-compose.yml' || 'deploy/dev/docker-compose.yml' }}
+      TARGET: ${{ vars.SSH_USER }}@${{ vars.SSH_HOST }}
+      TAG: ${{ github.sha }}
+    steps:
+      - name: Check the environment is configured
+        env:
+          SSH_HOST: ${{ vars.SSH_HOST }}
+          HAS_KEY: ${{ secrets.SSH_KEY != '' }}
+        run: |
+          if [ -z "$SSH_HOST" ] || [ "$HAS_KEY" != true ]; then
+            echo "::error::Environment '${{ github.ref_name == 'prod' && 'production' || 'development' }}' has no SSH_HOST/SSH_KEY yet. See README, section Deployment."
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ env.IMAGE }}
+          cache-to: type=gha,mode=max,scope=${{ env.IMAGE }}
+
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519
+
+      # No registry: the image is streamed straight into the server's Docker.
+      - name: Upload image
+        run: docker save "$IMAGE:$TAG" | gzip -1 | ssh -o BatchMode=yes "$TARGET" 'gunzip | docker load'
+
+      - name: Release
+        run: |
+          ssh -o BatchMode=yes "$TARGET" "install -d -m 750 '$DIR'"
+          scp -o BatchMode=yes "$COMPOSE" "$TARGET:$DIR/docker-compose.yml"
+          scp -o BatchMode=yes deploy/backup.sh "$TARGET:$DIR/backup.sh"
+          {
+            printf 'export TAG=%q IMAGE=%q CONTAINER=%q DIR=%q\n' "$TAG" "$IMAGE" "$CONTAINER" "$DIR"
+            cat deploy/release.sh
+          } | ssh -o BatchMode=yes "$TARGET" bash -s
+
+      - name: Smoke test
+        if: vars.APP_URL != ''
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          SMOKE_RESOLVE: ${{ vars.SMOKE_RESOLVE }}
+        run: |
+          # SMOKE_RESOLVE (e.g. techbestie.id:443:1.2.3.4) pins the domain to the
+          # server while DNS still points elsewhere; leave empty once DNS is live.
+          curl -fsS --retry 5 --retry-delay 3 --retry-all-errors \
+            ${SMOKE_RESOLVE:+--resolve "$SMOKE_RESOLVE"} "$APP_URL/api/health"
+          curl -fsS ${SMOKE_RESOLVE:+--resolve "$SMOKE_RESOLVE"} -o /dev/null "$APP_URL/"

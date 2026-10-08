@@ -218,6 +218,8 @@ export function initPricing({ onStack }) {
     const name = el('input', { id: 'f-name', required: true, maxLength: 80, placeholder: t('lead.namePh'), autocomplete: 'name' })
     const contact = el('input', { id: 'f-contact', required: true, maxLength: 120, placeholder: t('lead.contactPh') })
     const note = el('textarea', { id: 'f-note', maxLength: 1000, rows: 3, placeholder: t('lead.notePh') })
+    // Hidden from people; spam bots that fill every field are dropped by the server.
+    const trap = el('input', { name: 'website', tabIndex: -1, autocomplete: 'off' })
     const error = el('p', { className: 'error', role: 'alert' })
     const submit = el('button', { className: 'cta solid', type: 'submit', textContent: t('lead.send') })
     const form = el('form', { className: 'lead', noValidate: true },
@@ -226,6 +228,7 @@ export function initPricing({ onStack }) {
       el('label', {}, t('lead.name'), name),
       el('label', {}, t('lead.contact'), contact),
       el('label', {}, t('lead.note'), note),
+      el('label', { className: 'sr-only', ariaHidden: 'true' }, 'Website', trap),
       error, submit)
     form.addEventListener('submit', async (e) => {
       e.preventDefault()
@@ -240,7 +243,7 @@ export function initPricing({ onStack }) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            name: n, contact: c, note: note.value.trim(), lang: getLang(), currency: getCurrency(),
+            name: n, contact: c, note: note.value.trim(), website: trap.value, lang: getLang(), currency: getCurrency(),
             service: tr(service().title), summary: summaryText(),
             estimate: `${money(low, 'IDR')} – ${money(high, 'IDR')}`,
           }),

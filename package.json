@@ -4,14 +4,20 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node server.js",
+    "dev": "node --env-file-if-exists=.env server.js",
     "build": "vite build web --outDir ../dist --emptyOutDir",
-    "start": "node server.js --prod"
+    "start": "node --env-file-if-exists=.env server.js --prod",
+    "hash-password": "node password.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
-    "three": "^0.170.0"
+    "pg": "^8.23.1"
   },
   "devDependencies": {
+    "three": "^0.170.0",
     "vite": "^6.0.0"
+  },
+  "engines": {
+    "node": ">=22.9"
   }
 }

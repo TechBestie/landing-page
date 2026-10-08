@@ -1,0 +1,41 @@
+# Production stack, installed at /opt/techbestie on the production server.
+# CI copies this file on every deploy; edit it here, not on the server.
+#
+# - The database lives in the server's shared Postgres (no own Postgres container).
+#   DATABASE_URL in .env points at it.
+# - No host ports: the shared edge nginx container reaches the app over its Docker
+#   network as http://techbestie-app:3000.
+# - Network names default to the ones used on the shared VPS; override them in .env.
+# - The image is built by GitHub Actions and loaded with `docker load`;
+#   deploy/release.sh tags the running build as techbestie:current.
+name: techbestie
+
+services:
+  app:
+    image: techbestie:current
+    container_name: techbestie-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: "3000"
+      # Only the nginx container can reach the app, so its headers are trusted.
+      TRUST_PROXY: "1"
+    volumes:
+      - ./uploads:/app/uploads
+    networks:
+      - nginx
+      - shared-db
+    mem_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+networks:
+  nginx:
+    external: true
+    name: ${NGINX_NETWORK:-compose_nginx-network}
+  shared-db:
+    external: true
+    name: ${DB_NETWORK:-shared-db-net}

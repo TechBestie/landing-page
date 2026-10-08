@@ -1,7 +1,7 @@
 // TechBestie site server: serves the site and the small admin API.
-// Development:  node server.js            (Vite with live reload)
-// Production:   npm run build && node server.js --prod
-// Zero dependencies beyond Vite, which is only loaded in development.
+// Development:  npm run dev                  (Vite with live reload)
+// Production:   npm run build && npm start
+// Configuration comes from environment variables; see .env.example.
 
 import http from 'node:http'
 import fs from 'node:fs'
@@ -9,32 +9,33 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { DEFAULT_SETTINGS } from './web/src/pricing-default.js'
+import { connect } from './db.js'
+import { verifyPassword } from './password.js'
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url))
-const DATA = path.join(ROOT, 'data')
-const UPLOADS = path.join(DATA, 'uploads')
-const CONTENT = path.join(DATA, 'content.json')
 const DIST = path.join(ROOT, 'dist')
 const WEB = path.join(ROOT, 'web')
 
-const args = process.argv.slice(2)
-const PROD = args.includes('--prod')
-const PORT = Number(args[args.indexOf('--port') + 1]) || Number(process.env.PORT) || 5183
+const env = process.env
+const PROD = process.argv.includes('--prod') || env.NODE_ENV === 'production'
+const PORT = Number(env.PORT) || 5183
+const HOST = env.HOST || '0.0.0.0'
+const UPLOADS = path.resolve(env.UPLOAD_DIR || path.join(ROOT, 'data', 'uploads'))
+// Set when the app sits behind nginx: the client address is then read from X-Real-IP
+// and HTTPS from X-Forwarded-Proto. Never set it when the port is reachable directly.
+const TRUST_PROXY = env.TRUST_PROXY === '1'
 
-// Admin login. Edit admin.config.json to change it, then restart the server.
-const ADMIN_FILE = path.join(ROOT, 'admin.config.json')
-if (!fs.existsSync(ADMIN_FILE)) {
-  console.error('admin.config.json is missing. Copy admin.config.example.json to admin.config.json and set a password.')
+const missing = ['DATABASE_URL', 'ADMIN_USERNAME', 'ADMIN_PASSWORD_HASH'].filter((k) => !env[k])
+if (missing.length) {
+  console.error(`Missing environment variables: ${missing.join(', ')}. See .env.example.`)
   process.exit(1)
 }
-const ADMIN = JSON.parse(fs.readFileSync(ADMIN_FILE, 'utf8'))
+const ADMIN = { username: env.ADMIN_USERNAME, hash: env.ADMIN_PASSWORD_HASH }
 
-const LEADS = path.join(DATA, 'leads.json')
-const RATES = path.join(DATA, 'rates.json')
 const CATEGORY_IDS = ['web', 'ai', 'security']
 const STEP_ID = /^[a-z][a-z0-9_]{0,39}$/
 const RATE_TTL = 6 * 3600_000
-const MAX_LEADS = 1000
+const MAX_LEADS_SHOWN = 500
 const SESSION_HOURS = 8
 const MAX_UPLOAD = 6 * 1024 * 1024
 const MAX_SLIDES = 24
@@ -45,11 +46,34 @@ const MIME = {
   '.jpg': 'image/jpeg', '.webp': 'image/webp', '.ico': 'image/x-icon', '.woff2': 'font/woff2',
 }
 
+// The built site has no inline scripts, so scripts are limited to this origin.
+// Vite's dev server injects inline styles and scripts, so this is production only.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data: blob:",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ')
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  ...(PROD ? { 'Content-Security-Policy': CSP } : {}),
+}
+
 fs.mkdirSync(UPLOADS, { recursive: true })
+const db = await connect(env.DATABASE_URL)
 
-/* ---------- Sessions and login throttling ---------- */
+/* ---------- Sessions and throttling ---------- */
 
-const sessions = new Map() // token -> expiry time
 const attempts = new Map() // ip -> { count, resetAt }
 const leadAttempts = new Map()
 
@@ -59,15 +83,21 @@ const safeEqual = (a, b) => {
   return crypto.timingSafeEqual(x, y)
 }
 
-function sessionOf(req) {
+function clientIp(req) {
+  const real = TRUST_PROXY && req.headers['x-real-ip']
+  return typeof real === 'string' && real ? real : req.socket.remoteAddress
+}
+
+const isHttps = (req) => req.socket.encrypted || (TRUST_PROXY && req.headers['x-forwarded-proto'] === 'https')
+
+function sessionToken(req) {
   const m = /(?:^|;\s*)tb_session=([a-f0-9]{64})/.exec(req.headers.cookie || '')
-  if (!m) return null
-  const expiry = sessions.get(m[1])
-  if (!expiry || expiry < Date.now()) {
-    sessions.delete(m[1])
-    return null
-  }
-  return m[1]
+  return m ? m[1] : null
+}
+
+async function sessionOf(req) {
+  const token = sessionToken(req)
+  return token && (await db.hasSession(token)) ? token : null
 }
 
 function throttled(ip, map = attempts, windowMs = 60_000, max = 5) {
@@ -79,6 +109,14 @@ function throttled(ip, map = attempts, windowMs = 60_000, max = 5) {
   }
   return ++a.count > max
 }
+
+// Forget expired throttle entries and sessions so neither grows forever.
+const sweeper = setInterval(() => {
+  const now = Date.now()
+  for (const map of [attempts, leadAttempts]) for (const [ip, a] of map) if (a.resetAt < now) map.delete(ip)
+  db.pruneSessions().catch((err) => console.error('Session cleanup failed:', err.message))
+}, 10 * 60_000)
+sweeper.unref()
 
 /* ---------- Helpers ---------- */
 
@@ -104,6 +142,14 @@ function readBody(req, limit) {
   })
 }
 
+async function readJsonBody(req, limit) {
+  try {
+    return JSON.parse((await readBody(req, limit)).toString('utf8'))
+  } catch {
+    return null
+  }
+}
+
 const decode = (s) => {
   try {
     return decodeURIComponent(s)
@@ -119,20 +165,6 @@ const both = (v, max) =>
   typeof v === 'string' ? { id: text(v, max), en: text(v, max) } : { id: text(v?.id, max), en: text(v?.en, max) }
 
 const number = (v, min, max, fallback) => (Number.isFinite(v) && v >= min && v <= max ? v : fallback)
-
-function readJson(file, fallback) {
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'))
-  } catch {
-    return fallback
-  }
-}
-
-function writeJson(file, value) {
-  const tmp = file + '.tmp'
-  fs.writeFileSync(tmp, JSON.stringify(value, null, 2))
-  fs.renameSync(tmp, file)
-}
 
 function cleanSettings(input) {
   const s = input && typeof input === 'object' ? input : {}
@@ -188,37 +220,6 @@ function cleanPricing(input) {
   return out
 }
 
-/* ---------- Exchange rates ---------- */
-
-let rateCache = readJson(RATES, null) // { rates: { USD, AUD }, date, at }
-
-async function fetchRates() {
-  const sources = [
-    ['https://api.frankfurter.dev/v1/latest?base=USD&symbols=IDR,AUD', (d) => [d.rates, d.date]],
-    ['https://open.er-api.com/v6/latest/USD', (d) => [d.rates, new Date(d.time_last_update_unix * 1000).toISOString().slice(0, 10)]],
-  ]
-  for (const [url, pick] of sources) {
-    try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(6000) })
-      if (!res.ok) continue
-      const [r, date] = pick(await res.json())
-      if (!(r?.IDR > 1000) || !(r?.AUD > 0.1)) continue
-      return { rates: { USD: Math.round(r.IDR), AUD: Math.round(r.IDR / r.AUD) }, date, at: Date.now() }
-    } catch {}
-  }
-  return null
-}
-
-async function liveRates() {
-  if (rateCache && Date.now() - rateCache.at < RATE_TTL) return rateCache
-  const fresh = await fetchRates()
-  if (fresh) {
-    rateCache = fresh
-    writeJson(RATES, fresh)
-  }
-  return rateCache // may be stale or null when the services are unreachable
-}
-
 function cleanProjects(input) {
   if (!Array.isArray(input) || !input.length || input.length > MAX_SLIDES) return null
   const out = []
@@ -239,6 +240,45 @@ function cleanProjects(input) {
   return out
 }
 
+async function content() {
+  const c = await db.get(['projects', 'pricing', 'settings'])
+  return { projects: c.projects || null, pricing: c.pricing || null, settings: cleanSettings(c.settings) }
+}
+
+/* ---------- Exchange rates ---------- */
+
+async function fetchRates() {
+  const sources = [
+    ['https://api.frankfurter.dev/v1/latest?base=USD&symbols=IDR,AUD', (d) => [d.rates, d.date]],
+    ['https://open.er-api.com/v6/latest/USD', (d) => [d.rates, new Date(d.time_last_update_unix * 1000).toISOString().slice(0, 10)]],
+  ]
+  for (const [url, pick] of sources) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(6000) })
+      if (!res.ok) continue
+      const [r, date] = pick(await res.json())
+      if (!(r?.IDR > 1000) || !(r?.AUD > 0.1)) continue
+      return { rates: { USD: Math.round(r.IDR), AUD: Math.round(r.IDR / r.AUD) }, date, at: Date.now() }
+    } catch {}
+  }
+  return null
+}
+
+let rateCache = null // { rates: { USD, AUD }, date, at }
+let rateFetch = null // shared by requests that arrive while a fetch is running
+
+async function liveRates() {
+  if (!rateCache) rateCache = (await db.get(['rates'])).rates || null
+  if (rateCache && Date.now() - rateCache.at < RATE_TTL) return rateCache
+  rateFetch ||= fetchRates().finally(() => (rateFetch = null))
+  const fresh = await rateFetch
+  if (fresh) {
+    rateCache = fresh
+    await db.set({ rates: fresh })
+  }
+  return rateCache // may be stale or null when the services are unreachable
+}
+
 function imageType(buf) {
   if (buf.length > 8 && buf.readUInt32BE(0) === 0x89504e47) return 'png'
   if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg'
@@ -254,7 +294,6 @@ function serveFile(res, base, rel, cache) {
     res.writeHead(200, {
       'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
       'Cache-Control': cache,
-      'X-Content-Type-Options': 'nosniff',
     })
     res.end(data)
   })
@@ -265,26 +304,41 @@ function serveFile(res, base, rel, cache) {
 async function api(req, res, url) {
   const route = `${req.method} ${url.pathname}`
 
-  if (route === 'GET /api/content') {
-    const c = readJson(CONTENT, {})
-    return send(res, 200, { projects: c.projects || null, pricing: c.pricing || null, settings: cleanSettings(c.settings) })
+  // Requests that change something must come from this site. SameSite=Strict
+  // already keeps the session cookie off cross-site requests; this also covers
+  // the public lead form.
+  if (req.method !== 'GET' && req.headers.origin) {
+    let host = ''
+    try {
+      host = new URL(req.headers.origin).host
+    } catch {}
+    if (host !== req.headers.host) return send(res, 403, { error: 'Forbidden.' })
   }
 
+  if (route === 'GET /api/health') {
+    try {
+      await db.ping()
+      return send(res, 200, { ok: true })
+    } catch {
+      return send(res, 503, { ok: false })
+    }
+  }
+
+  if (route === 'GET /api/content') return send(res, 200, await content())
+
   if (route === 'GET /api/rates') {
-    const settings = cleanSettings(readJson(CONTENT, {}).settings)
+    const { settings } = await content()
     const live = settings.ratesMode === 'auto' ? await liveRates() : null
     if (live) return send(res, 200, { rates: live.rates, date: live.date, source: 'live' })
     return send(res, 200, { rates: settings.manualRates, date: '', source: 'manual' })
   }
 
   if (route === 'POST /api/lead') {
-    if (throttled(req.socket.remoteAddress, leadAttempts, 600_000, 5)) return send(res, 429, { error: 'Too many requests.' })
-    let body = {}
-    try {
-      body = JSON.parse((await readBody(req, 8192)).toString('utf8'))
-    } catch {}
+    if (throttled(clientIp(req), leadAttempts, 600_000, 5)) return send(res, 429, { error: 'Too many requests.' })
+    const body = (await readJsonBody(req, 8192)) || {}
+    // Filled only by bots (the field is hidden). Pretend it worked.
+    if (body.website) return send(res, 200, { ok: true })
     const lead = {
-      at: new Date().toISOString(),
       name: text(body.name, 80),
       contact: text(body.contact, 120),
       note: text(body.note, 1000),
@@ -295,45 +349,40 @@ async function api(req, res, url) {
       currency: ['IDR', 'USD', 'AUD'].includes(body.currency) ? body.currency : 'IDR',
     }
     if (!lead.name || !lead.contact) return send(res, 400, { error: 'Name and contact are required.' })
-    writeJson(LEADS, [...readJson(LEADS, []), lead].slice(-MAX_LEADS))
+    await db.addLead(lead)
     return send(res, 200, { ok: true })
   }
 
-  if (route === 'GET /api/session') return send(res, 200, { admin: Boolean(sessionOf(req)) })
+  if (route === 'GET /api/session') return send(res, 200, { admin: Boolean(await sessionOf(req)) })
 
   if (route === 'POST /api/login') {
-    if (throttled(req.socket.remoteAddress)) return send(res, 429, { error: 'Too many attempts. Wait a minute.' })
-    let body = {}
-    try {
-      body = JSON.parse((await readBody(req, 4096)).toString('utf8'))
-    } catch {}
-    const ok = safeEqual(body.username, ADMIN.username) & safeEqual(body.password, ADMIN.password)
-    if (!ok) return send(res, 401, { error: 'Wrong username or password.' })
+    if (throttled(clientIp(req))) return send(res, 429, { error: 'Too many attempts. Wait a minute.' })
+    const body = (await readJsonBody(req, 4096)) || {}
+    // Both checks always run, so timing does not reveal which one failed.
+    const userOk = safeEqual(body.username, ADMIN.username)
+    const passOk = await verifyPassword(String(body.password ?? ''), ADMIN.hash)
+    if (!userOk || !passOk) return send(res, 401, { error: 'Wrong username or password.' })
     const token = crypto.randomBytes(32).toString('hex')
-    sessions.set(token, Date.now() + SESSION_HOURS * 3600_000)
+    await db.createSession(token, SESSION_HOURS)
     return send(res, 200, { admin: true }, {
-      'Set-Cookie': `tb_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_HOURS * 3600}${PROD ? '; Secure' : ''}`,
+      'Set-Cookie': `tb_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_HOURS * 3600}${isHttps(req) ? '; Secure' : ''}`,
     })
   }
 
   if (route === 'POST /api/logout') {
-    const token = sessionOf(req)
-    if (token) sessions.delete(token)
+    const token = sessionToken(req)
+    if (token) await db.deleteSession(token)
     return send(res, 200, { admin: false }, { 'Set-Cookie': 'tb_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0' })
   }
 
-  // Everything below changes content and needs a login.
-  if (!sessionOf(req)) return send(res, 401, { error: 'Please log in again.' })
+  // Everything below changes content or shows leads and needs a login.
+  if (!(await sessionOf(req))) return send(res, 401, { error: 'Please log in again.' })
 
   if (route === 'PUT /api/content') {
-    let body
-    try {
-      body = JSON.parse((await readBody(req, 400_000)).toString('utf8'))
-    } catch {
-      return send(res, 400, { error: 'Could not read the content.' })
-    }
+    const body = await readJsonBody(req, 400_000)
+    if (!body || typeof body !== 'object') return send(res, 400, { error: 'Could not read the content.' })
     // Only the parts that were sent are replaced.
-    const next = readJson(CONTENT, {})
+    const next = {}
     if ('projects' in body) {
       const projects = cleanProjects(body.projects)
       if (!projects) return send(res, 400, { error: 'Every slide needs a title.' })
@@ -345,11 +394,11 @@ async function api(req, res, url) {
       next.pricing = pricing
     }
     if ('settings' in body) next.settings = cleanSettings(body.settings)
-    writeJson(CONTENT, next)
-    return send(res, 200, { projects: next.projects || null, pricing: next.pricing || null, settings: cleanSettings(next.settings) })
+    await db.set(next)
+    return send(res, 200, await content())
   }
 
-  if (route === 'GET /api/leads') return send(res, 200, { leads: readJson(LEADS, []).reverse() })
+  if (route === 'GET /api/leads') return send(res, 200, { leads: await db.leads(MAX_LEADS_SHOWN) })
 
   if (route === 'POST /api/upload') {
     let buf
@@ -361,7 +410,7 @@ async function api(req, res, url) {
     const type = imageType(buf)
     if (!type) return send(res, 415, { error: 'Only PNG, JPG or WebP pictures are accepted.' })
     const name = crypto.randomBytes(12).toString('hex') + '.' + type
-    fs.writeFileSync(path.join(UPLOADS, name), buf)
+    await fs.promises.writeFile(path.join(UPLOADS, name), buf)
     return send(res, 200, { url: '/uploads/' + name })
   }
 
@@ -371,11 +420,14 @@ async function api(req, res, url) {
 /* ---------- Server ---------- */
 
 const server = http.createServer()
+server.headersTimeout = 20_000
+server.requestTimeout = 60_000
+
 let vite = null
 if (!PROD) {
   const { createServer } = await import('vite')
   // Vite may only read the site folder and installed packages, never the
-  // server's own files (admin.config.json, data/).
+  // server's own files (.env, data/).
   vite = await createServer({
     root: WEB,
     configFile: false,
@@ -389,6 +441,7 @@ if (!PROD) {
 }
 
 server.on('request', (req, res) => {
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v)
   const url = new URL(req.url, 'http://localhost')
   if (url.pathname.startsWith('/api/')) {
     return api(req, res, url).catch((err) => {
@@ -399,11 +452,23 @@ server.on('request', (req, res) => {
   if (url.pathname.startsWith('/uploads/')) {
     return serveFile(res, UPLOADS, decode(url.pathname.slice('/uploads/'.length)), 'public, max-age=31536000, immutable')
   }
-  if (/admin\.config|\/data\/|server\.js/i.test(decode(url.pathname))) return send(res, 404, 'Not found')
+  if (/\.env|\/data\/|server\.js|db\.js|password\.js/i.test(decode(url.pathname))) return send(res, 404, 'Not found')
   if (vite) return vite.middlewares(req, res)
   const page = url.pathname === '/' || ['/admin', '/admin/'].includes(url.pathname)
   const rel = page ? 'index.html' : decode(url.pathname.slice(1))
   serveFile(res, DIST, rel, rel.startsWith('assets/') ? 'public, max-age=31536000, immutable' : 'no-cache')
 })
 
-server.listen(PORT, () => console.log(`TechBestie running at http://localhost:${PORT} (${PROD ? 'production' : 'development'})`))
+server.listen(PORT, HOST, () =>
+  console.log(`TechBestie running at http://${HOST}:${PORT} (${PROD ? 'production' : 'development'})`))
+
+// Docker sends SIGTERM on stop and redeploy: finish open requests, then close the pool.
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.once(signal, () => {
+    console.log(`${signal} received, shutting down`)
+    clearInterval(sweeper)
+    server.close(() => db.pool.end().finally(() => process.exit(0)))
+    server.closeIdleConnections()
+    setTimeout(() => process.exit(1), 10_000).unref()
+  })
+}

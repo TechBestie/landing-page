@@ -2,3 +2,7 @@ node_modules
 dist
 admin.config.json
 data/
+backups/
+.env
+.env.*
+!.env.example
