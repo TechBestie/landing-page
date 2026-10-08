@@ -85,7 +85,7 @@ jobs:
           HAS_KEY: ${{ secrets.SSH_KEY != '' }}
         run: |
           if [ -z "$SSH_HOST" ] || [ "$HAS_KEY" != true ]; then
-            echo "::error::Environment '${{ github.ref_name == 'prod' && 'production' || 'development' }}' has no SSH_HOST/SSH_KEY yet. See README, section Deployment."
+            echo "::error::Environment '${{ github.ref_name == 'prod' && 'production' || 'development' }}' has no SSH_HOST/SSH_KEY yet. See README, section \"Setup server production\"."
             exit 1
           fi
 

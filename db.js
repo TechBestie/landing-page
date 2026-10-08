@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 const hash = (token) => crypto.createHash('sha256').update(token).digest('hex')
 
 export async function connect(url) {
-  const pool = new pg.Pool({ connectionString: url, max: 5, idleTimeoutMillis: 30_000 })
+  // Small pool: production shares one Postgres (max_connections 50) with other apps.
+  const pool = new pg.Pool({ connectionString: url, max: 3, idleTimeoutMillis: 30_000 })
   pool.on('error', (err) => console.error('Database connection error:', err.message))
   await pool.query(SCHEMA)
 
